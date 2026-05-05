@@ -11,6 +11,13 @@ using namespace std;
 
     PetscErrorCode testeg1(EMContext *ctx);
 
+    PetscErrorCode load_context_from_arrays(EMContext *ctx, PetscInt n_edges, PetscInt n_nodes,
+                                            PetscInt n_row_ptr, PetscInt n_col_idx, PetscInt n_rhs,
+                                            PetscInt n_values, const double *edgesN, const double *nodes,
+                                            const PetscInt *row_ptr, const PetscInt *col_idx,
+                                            const PetscReal *rhs_real, const PetscReal *rhs_imag,
+                                            const PetscReal *data_real, const PetscReal *data_imag);
+
     PetscErrorCode setup_ams(EMContext *ctx);
 
     PetscErrorCode create_linear_system(EMContext *ctx);
@@ -28,6 +35,8 @@ using namespace std;
     PetscErrorCode create_pc(EMContext *ctx);
 
     PetscErrorCode solve_linear_system(EMContext *ctx, const PETScBlockVector &s, PETScBlockVector &e, PetscInt max_it, PetscReal rtol);
+
+    PetscErrorCode copy_result_to_arrays(EMContext *ctx, PetscInt n_result, PetscReal *out_real, PetscReal *out_imag);
 
     PetscErrorCode write_result(EMContext *ctx);
 
