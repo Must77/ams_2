@@ -54,6 +54,34 @@ PetscErrorCode test2Dim2(EMContext* ctx) {
     PetscFunctionReturn(0);
 }
 
+PetscErrorCode load_context_from_arrays(EMContext* ctx, PetscInt n_edges,
+                                        PetscInt n_nodes, PetscInt n_row_ptr,
+                                        PetscInt n_col_idx, PetscInt n_rhs,
+                                        PetscInt n_values, const double* edgesN,
+                                        const double* nodes,
+                                        const PetscInt* row_ptr,
+                                        const PetscInt* col_idx,
+                                        const PetscReal* rhs_real,
+                                        const PetscReal* rhs_imag,
+                                        const PetscReal* data_real,
+                                        const PetscReal* data_imag) {
+    PetscFunctionBegin;
+
+    ctx->edgesN.assign(edgesN, edgesN + n_edges * 2);
+    ctx->nodes.assign(nodes, nodes + n_nodes * 3);
+
+    ctx->rptr.assign(row_ptr, row_ptr + n_row_ptr);
+    ctx->cidx.assign(col_idx, col_idx + n_col_idx);
+
+    ctx->b_real.assign(rhs_real, rhs_real + n_rhs);
+    ctx->b_imag.assign(rhs_imag, rhs_imag + n_rhs);
+
+    ctx->data_real.assign(data_real, data_real + n_values);
+    ctx->data_imag.assign(data_imag, data_imag + n_values);
+
+    PetscFunctionReturn(0);
+}
+
 PetscErrorCode testeg1(EMContext* ctx) {
     PetscFunctionBegin;
     //
@@ -62,66 +90,76 @@ PetscErrorCode testeg1(EMContext* ctx) {
     std::size_t nE;
     fe >> nE;  // 第一行：行数
 
-    ctx->edgesN.reserve(nE * 2);
+    std::vector<double> edgesN;
+    edgesN.reserve(nE * 2);
     double x{};
     while (fe >> x)
-        ctx->edgesN.push_back(x);  // 逐个压扁
+        edgesN.push_back(x);  // 逐个压扁
     fe.close();
-    cout << "edgesN: " << ctx->edgesN.size() / 2 << endl;
+    cout << "edgesN: " << edgesN.size() / 2 << endl;
     /* ---------- 读 nodes ---------- */
     std::ifstream fn("nodes.txt");
     std::size_t nN;
     fn >> nN;  // 第一行：行数
 
-    ctx->nodes.reserve(nN * 3);
+    std::vector<double> nodes;
+    nodes.reserve(nN * 3);
     while (fn >> x)
-        ctx->nodes.push_back(x);  // 逐个压扁
+        nodes.push_back(x);  // 逐个压扁
     fn.close();
-    cout << "nodes: " << ctx->nodes.size() / 3 << endl;
+    cout << "nodes: " << nodes.size() / 3 << endl;
     /* ---------- 读 rowptr---------- */
     std::ifstream frow("rowPtr.txt");
     std::size_t nrow;
     frow >> nrow;  // 第一行：行数
-    ctx->rptr.clear();
-    ctx->rptr.reserve(nrow);
-    while (frow >> x)
-        ctx->rptr.push_back(x);  // 逐个压扁
+    std::vector<PetscInt> row_ptr;
+    row_ptr.reserve(nrow);
+    PetscInt ix{};
+    while (frow >> ix)
+        row_ptr.push_back(ix);  // 逐个压扁
     frow.close();
 
     /* ---------- 读 colIdx---------- */
     std::ifstream fcol("colIdx.txt");
     std::size_t ncol;
     fcol >> ncol;  // 第一行：行数
-    ctx->cidx.clear();
-    ctx->cidx.reserve(ncol);
-    while (fcol >> x)
-        ctx->cidx.push_back(x);  // 逐个压扁
+    std::vector<PetscInt> col_idx;
+    col_idx.reserve(ncol);
+    while (fcol >> ix)
+        col_idx.push_back(ix);  // 逐个压扁
     fcol.close();
 
     /* ---------- 读 rhs---------- */
     std::ifstream frhs("rhs.txt");
     std::size_t nrhs;
     frhs >> nrhs;  // 第一行：行数
-    ctx->b_imag.clear();
-    ctx->b_real.clear();
-    ctx->b_real.resize(nrhs);
-    ctx->b_imag.resize(nrhs);
+    std::vector<PetscReal> rhs_real(nrhs);
+    std::vector<PetscReal> rhs_imag(nrhs);
     for (int i = 0; i < nrhs; ++i) {
-        frhs >> ctx->b_real[i] >> ctx->b_imag[i];
+        frhs >> rhs_real[i] >> rhs_imag[i];
     }
     frhs.close();
     /* ---------- 读 val_real_imag---------- */
     std::ifstream fval("val_real_imag.txt");
     std::size_t nval;
     fval >> nval;  // 第一行：行数
-    ctx->data_real.clear();
-    ctx->data_imag.clear();
-    ctx->data_real.resize(nval);
-    ctx->data_imag.resize(nval);
+    std::vector<PetscReal> data_real(nval);
+    std::vector<PetscReal> data_imag(nval);
     for (int i = 0; i < nval; ++i) {
-        fval >> ctx->data_real[i] >> ctx->data_imag[i];
+        fval >> data_real[i] >> data_imag[i];
     }
     fval.close();
+
+    PetscCall(load_context_from_arrays(ctx, static_cast<PetscInt>(nE),
+                                       static_cast<PetscInt>(nN),
+                                       static_cast<PetscInt>(nrow),
+                                       static_cast<PetscInt>(ncol),
+                                       static_cast<PetscInt>(nrhs),
+                                       static_cast<PetscInt>(nval),
+                                       edgesN.data(), nodes.data(),
+                                       row_ptr.data(), col_idx.data(),
+                                       rhs_real.data(), rhs_imag.data(),
+                                       data_real.data(), data_imag.data()));
 
     PetscFunctionReturn(0);
 }
@@ -467,29 +505,48 @@ PetscErrorCode destroy_linear_system(EMContext* ctx) {
     PetscFunctionReturn(0);
 }
 
-PetscErrorCode write_result(EMContext* ctx) {
+PetscErrorCode copy_result_to_arrays(EMContext* ctx, PetscInt n_result,
+                                     PetscReal* out_real,
+                                     PetscReal* out_imag) {
     Vec xr = ctx->dual_e.re;
     Vec xi = ctx->dual_e.im;
 
     PetscInt n;
     PetscFunctionBegin;
     PetscCall(VecGetLocalSize(xr, &n));  // 本地长度
+    PetscCheck(n_result == n, PETSC_COMM_SELF, EM_ERR_USER,
+               "Result output length does not match local solution size.");
 
     const PetscScalar *arr_r, *arr_i;
     PetscCall(VecGetArrayRead(xr, &arr_r));
     PetscCall(VecGetArrayRead(xi, &arr_i));
 
-    std::vector<double> s_real(arr_r, arr_r + n);
-    std::vector<double> s_imag(arr_i, arr_i + n);
+    for (PetscInt i = 0; i < n; ++i) {
+        out_real[i] = arr_r[i];
+        out_imag[i] = arr_i[i];
+    }
+
+    PetscCall(VecRestoreArrayRead(xr, &arr_r));
+    PetscCall(VecRestoreArrayRead(xi, &arr_i));
+
+    PetscFunctionReturn(0);
+}
+
+PetscErrorCode write_result(EMContext* ctx) {
+    PetscInt n;
+
+    PetscFunctionBegin;
+    PetscCall(VecGetLocalSize(ctx->dual_e.re, &n));  // 本地长度
+
+    std::vector<PetscReal> s_real(n);
+    std::vector<PetscReal> s_imag(n);
+    PetscCall(copy_result_to_arrays(ctx, n, s_real.data(), s_imag.data()));
 
     ofstream ofs("result.txt");
     for (int i = 0; i < s_real.size(); ++i) {
         ofs << i << "\t" << s_real[i] << " " << s_imag[i] << endl;
     }
     ofs.close();
-
-    PetscCall(VecRestoreArrayRead(xr, &arr_r));
-    PetscCall(VecRestoreArrayRead(xi, &arr_i));
 
     PetscFunctionReturn(0);
 }
