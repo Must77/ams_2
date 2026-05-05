@@ -9,7 +9,7 @@ using namespace std;
 
     PetscErrorCode test2Dim2(EMContext *ctx);
 
-    void testeg1(EMContext *ctx);
+    PetscErrorCode testeg1(EMContext *ctx);
 
     PetscErrorCode setup_ams(EMContext *ctx);
 
@@ -28,6 +28,8 @@ using namespace std;
     PetscErrorCode create_pc(EMContext *ctx);
 
     PetscErrorCode solve_linear_system(EMContext *ctx, const PETScBlockVector &s, PETScBlockVector &e, PetscInt max_it, PetscReal rtol);
+
+    PetscErrorCode write_result(EMContext *ctx);
 
     PetscErrorCode destroy_pc(EMContext *ctx);
 

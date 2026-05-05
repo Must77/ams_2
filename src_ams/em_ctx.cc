@@ -75,7 +75,6 @@ PetscErrorCode create_context(EMContext *ctx) {
 PetscErrorCode destroy_context(EMContext *ctx) {
   PetscFunctionBegin;
 
-  PetscCall(PetscLogView(ctx->LS_log));
   PetscCall(PetscViewerDestroy(&ctx->LS_log));
 
   PetscCall(MPI_Comm_free(&ctx->group_comm));
