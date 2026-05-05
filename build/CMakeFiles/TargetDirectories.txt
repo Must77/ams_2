@@ -1,0 +1,3 @@
+/home/dt/桌面/AMS1/ams_2/build/CMakeFiles/FemAms.dir
+/home/dt/桌面/AMS1/ams_2/build/CMakeFiles/edit_cache.dir
+/home/dt/桌面/AMS1/ams_2/build/CMakeFiles/rebuild_cache.dir
