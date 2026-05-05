@@ -532,6 +532,19 @@ PetscErrorCode copy_result_to_arrays(EMContext* ctx, PetscInt n_result,
     PetscFunctionReturn(0);
 }
 
+PetscErrorCode write_result_arrays(PetscInt n_result, const PetscReal* out_real,
+                                   const PetscReal* out_imag) {
+    PetscFunctionBegin;
+
+    ofstream ofs("result.txt");
+    for (PetscInt i = 0; i < n_result; ++i) {
+        ofs << i << "\t" << out_real[i] << " " << out_imag[i] << endl;
+    }
+    ofs.close();
+
+    PetscFunctionReturn(0);
+}
+
 PetscErrorCode write_result(EMContext* ctx) {
     PetscInt n;
 
@@ -542,16 +555,20 @@ PetscErrorCode write_result(EMContext* ctx) {
     std::vector<PetscReal> s_imag(n);
     PetscCall(copy_result_to_arrays(ctx, n, s_real.data(), s_imag.data()));
 
-    ofstream ofs("result.txt");
-    for (int i = 0; i < s_real.size(); ++i) {
-        ofs << i << "\t" << s_real[i] << " " << s_imag[i] << endl;
-    }
-    ofs.close();
+    PetscCall(write_result_arrays(n, s_real.data(), s_imag.data()));
 
     PetscFunctionReturn(0);
 }
 
-PetscErrorCode solve_eg1() {
+PetscErrorCode solve_eg1(PetscInt n_edges, PetscInt n_nodes,
+                         PetscInt n_row_ptr, PetscInt n_col_idx,
+                         PetscInt n_rhs, PetscInt n_values,
+                         const double* edgesN, const double* nodes,
+                         const PetscInt* row_ptr, const PetscInt* col_idx,
+                         const PetscReal* rhs_real, const PetscReal* rhs_imag,
+                         const PetscReal* data_real,
+                         const PetscReal* data_imag, PetscInt n_result,
+                         PetscReal* out_real, PetscReal* out_imag) {
     PetscFunctionBegin;  // petsc 开始
 
     EMContext ctx;
@@ -563,7 +580,9 @@ PetscErrorCode solve_eg1() {
     // 需要数据
     // 标准 CSR 格式 的 jcol row val_real val_imag b_real b_imag
     // ams 所需要的 edgetonode[numedge.2] coods[numnodes,3]
-    PetscCall(testeg1(&ctx));  // 读如数据的案例，把所有需要数据写入
+    PetscCall(load_context_from_arrays(
+        &ctx, n_edges, n_nodes, n_row_ptr, n_col_idx, n_rhs, n_values, edgesN,
+        nodes, row_ptr, col_idx, rhs_real, rhs_imag, data_real, data_imag));
 
     PetscCall(PetscViewerASCIIPushTab(ctx.LS_log));  // petsc 检测信息
     //
@@ -579,7 +598,7 @@ PetscErrorCode solve_eg1() {
     PetscCall(solve_linear_system(&ctx, ctx.s, ctx.dual_e, ctx.K_max_it,
                                   ctx.dual_rtol));  // 求解
 
-    PetscCall(write_result(&ctx));
+    PetscCall(copy_result_to_arrays(&ctx, n_result, out_real, out_imag));
 
     // 释放内存
     PetscCall(destroy_pc(&ctx));

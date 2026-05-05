@@ -38,6 +38,8 @@ using namespace std;
 
     PetscErrorCode copy_result_to_arrays(EMContext *ctx, PetscInt n_result, PetscReal *out_real, PetscReal *out_imag);
 
+    PetscErrorCode write_result_arrays(PetscInt n_result, const PetscReal *out_real, const PetscReal *out_imag);
+
     PetscErrorCode write_result(EMContext *ctx);
 
     PetscErrorCode destroy_pc(EMContext *ctx);
@@ -45,7 +47,14 @@ using namespace std;
     PetscErrorCode destroy_linear_system(EMContext *ctx);
 
     //测试
-    PetscErrorCode solve_eg1();
+    PetscErrorCode solve_eg1(PetscInt n_edges, PetscInt n_nodes,
+                              PetscInt n_row_ptr, PetscInt n_col_idx,
+                              PetscInt n_rhs, PetscInt n_values,
+                              const double *edgesN, const double *nodes,
+                              const PetscInt *row_ptr, const PetscInt *col_idx,
+                              const PetscReal *rhs_real, const PetscReal *rhs_imag,
+                              const PetscReal *data_real, const PetscReal *data_imag,
+                              PetscInt n_result, PetscReal *out_real, PetscReal *out_imag);
 
     // PetscErrorCode initAMS();
 
