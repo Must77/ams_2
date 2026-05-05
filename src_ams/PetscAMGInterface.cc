@@ -54,7 +54,8 @@ PetscErrorCode test2Dim2(EMContext* ctx) {
     PetscFunctionReturn(0);
 }
 
-void testeg1(EMContext* ctx) {
+PetscErrorCode testeg1(EMContext* ctx) {
+    PetscFunctionBegin;
     //
     /* ---------- 读 edgesN ---------- */
     std::ifstream fe("edgesN.txt");
@@ -121,6 +122,8 @@ void testeg1(EMContext* ctx) {
         fval >> ctx->data_real[i] >> ctx->data_imag[i];
     }
     fval.close();
+
+    PetscFunctionReturn(0);
 }
 
 PetscErrorCode setup_ams(EMContext* ctx) {
@@ -464,6 +467,33 @@ PetscErrorCode destroy_linear_system(EMContext* ctx) {
     PetscFunctionReturn(0);
 }
 
+PetscErrorCode write_result(EMContext* ctx) {
+    Vec xr = ctx->dual_e.re;
+    Vec xi = ctx->dual_e.im;
+
+    PetscInt n;
+    PetscFunctionBegin;
+    PetscCall(VecGetLocalSize(xr, &n));  // 本地长度
+
+    const PetscScalar *arr_r, *arr_i;
+    PetscCall(VecGetArrayRead(xr, &arr_r));
+    PetscCall(VecGetArrayRead(xi, &arr_i));
+
+    std::vector<double> s_real(arr_r, arr_r + n);
+    std::vector<double> s_imag(arr_i, arr_i + n);
+
+    ofstream ofs("result.txt");
+    for (int i = 0; i < s_real.size(); ++i) {
+        ofs << i << "\t" << s_real[i] << " " << s_imag[i] << endl;
+    }
+    ofs.close();
+
+    PetscCall(VecRestoreArrayRead(xr, &arr_r));
+    PetscCall(VecRestoreArrayRead(xi, &arr_i));
+
+    PetscFunctionReturn(0);
+}
+
 PetscErrorCode solve_eg1() {
     PetscFunctionBegin;  // petsc 开始
 
@@ -476,7 +506,7 @@ PetscErrorCode solve_eg1() {
     // 需要数据
     // 标准 CSR 格式 的 jcol row val_real val_imag b_real b_imag
     // ams 所需要的 edgetonode[numedge.2] coods[numnodes,3]
-    testeg1(&ctx);  // 读如数据的案例，把所有需要数据写入
+    PetscCall(testeg1(&ctx));  // 读如数据的案例，把所有需要数据写入
 
     PetscCall(PetscViewerASCIIPushTab(ctx.LS_log));  // petsc 检测信息
     //
@@ -492,29 +522,7 @@ PetscErrorCode solve_eg1() {
     PetscCall(solve_linear_system(&ctx, ctx.s, ctx.dual_e, ctx.K_max_it,
                                   ctx.dual_rtol));  // 求解
 
-    // 提取数据
-
-    Vec xr = ctx.dual_e.re;
-    Vec xi = ctx.dual_e.im;
-
-    PetscInt n;
-    VecGetLocalSize(xr, &n);  // 本地长度
-
-    const PetscScalar *arr_r, *arr_i;
-    VecGetArrayRead(xr, &arr_r);
-    VecGetArrayRead(xi, &arr_i);
-
-    std::vector<double> s_real(arr_r, arr_r + n);
-    std::vector<double> s_imag(arr_i, arr_i + n);
-
-    ofstream ofs("result.txt");
-    for (int i = 0; i < s_real.size(); ++i) {
-        ofs << i << "\t" << s_real[i] << " " << s_imag[i] << endl;
-    }
-    ofs.close();
-
-    VecRestoreArrayRead(xr, &arr_r);
-    VecRestoreArrayRead(xi, &arr_i);
+    PetscCall(write_result(&ctx));
 
     // 释放内存
     PetscCall(destroy_pc(&ctx));
@@ -522,6 +530,8 @@ PetscErrorCode solve_eg1() {
     PetscCall(destroy_linear_system(&ctx));
 
     PetscCall(PetscViewerASCIIPopTab(ctx.LS_log));
+
+    PetscCall(destroy_context(&ctx));
 
     PetscFunctionReturn(0);
 }
