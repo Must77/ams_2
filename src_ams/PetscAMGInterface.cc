@@ -85,6 +85,56 @@ PetscErrorCode expand_upper_triangle_1based_to_full_csr(
     PetscFunctionReturn(0);
 }
 
+PetscErrorCode prepare_fortran_upper_1based_inputs(
+    PetscInt n_edges, PetscInt n_nodes, PetscInt n_upper_row_ptr,
+    PetscInt n_upper_values, const PetscInt* edge_nodes_1based,
+    const double* node_coords, const PetscInt* upper_row_ptr,
+    const PetscInt* upper_col_idx, const PetscReal* rhs_real,
+    const PetscReal* rhs_imag, const PetscReal* upper_real,
+    const PetscReal* upper_imag, std::vector<double>& edgesN,
+    std::vector<double>& nodes, std::vector<PetscInt>& row_ptr,
+    std::vector<PetscInt>& col_idx,
+    std::vector<PetscReal>& rhs_real_internal,
+    std::vector<PetscReal>& rhs_imag_internal,
+    std::vector<PetscReal>& data_real, std::vector<PetscReal>& data_imag) {
+    PetscFunctionBegin;
+
+    PetscCheck(n_edges >= 0, PETSC_COMM_SELF, EM_ERR_USER,
+               "Edge count must be non-negative.");
+    PetscCheck(n_nodes >= 0, PETSC_COMM_SELF, EM_ERR_USER,
+               "Node count must be non-negative.");
+    PetscCheck(edge_nodes_1based, PETSC_COMM_SELF, EM_ERR_USER,
+               "Fortran edge-to-node array is null.");
+    PetscCheck(node_coords, PETSC_COMM_SELF, EM_ERR_USER,
+               "Node coordinate array is null.");
+    PetscCheck(rhs_real, PETSC_COMM_SELF, EM_ERR_USER,
+               "RHS real array is null.");
+    PetscCheck(rhs_imag, PETSC_COMM_SELF, EM_ERR_USER,
+               "RHS imaginary array is null.");
+
+    edgesN.assign(n_edges * 2, 0);
+    for (PetscInt i = 0; i < n_edges * 2; ++i) {
+        const PetscInt node = edge_nodes_1based[i] - 1;
+        PetscCheck(node >= 0 && node < n_nodes, PETSC_COMM_SELF, EM_ERR_USER,
+                   "Fortran edge-to-node entry is outside node range.");
+        edgesN[i] = static_cast<double>(node);
+    }
+
+    nodes.assign(node_coords, node_coords + n_nodes * 3);
+
+    rhs_real_internal.assign(rhs_real, rhs_real + n_edges);
+    rhs_imag_internal.resize(n_edges);
+    for (PetscInt i = 0; i < n_edges; ++i) {
+        rhs_imag_internal[i] = -rhs_imag[i];
+    }
+
+    PetscCall(expand_upper_triangle_1based_to_full_csr(
+        n_edges, n_upper_row_ptr, n_upper_values, upper_row_ptr, upper_col_idx,
+        upper_real, upper_imag, row_ptr, col_idx, data_real, data_imag));
+
+    PetscFunctionReturn(0);
+}
+
 PetscErrorCode test2Dim2(EMContext* ctx) {
     PetscFunctionBegin;
 
@@ -641,6 +691,49 @@ PetscErrorCode write_result(EMContext* ctx) {
     PetscCall(copy_result_to_arrays(ctx, n, s_real.data(), s_imag.data()));
 
     PetscCall(write_result_arrays(n, s_real.data(), s_imag.data()));
+
+    PetscFunctionReturn(0);
+}
+
+PetscErrorCode solve_eg1_fortran_upper_1based(
+    PetscInt n_edges, PetscInt n_nodes, PetscInt n_upper_row_ptr,
+    PetscInt n_upper_values, const PetscInt* edge_nodes_1based,
+    const double* node_coords, const PetscInt* upper_row_ptr,
+    const PetscInt* upper_col_idx, const PetscReal* rhs_real,
+    const PetscReal* rhs_imag, const PetscReal* upper_real,
+    const PetscReal* upper_imag, PetscInt n_result, PetscReal* out_real,
+    PetscReal* out_imag) {
+    PetscFunctionBegin;
+
+    PetscCheck(n_result == n_edges, PETSC_COMM_SELF, EM_ERR_USER,
+               "Result length must match edge count.");
+    PetscCheck(out_real, PETSC_COMM_SELF, EM_ERR_USER,
+               "Output real array is null.");
+    PetscCheck(out_imag, PETSC_COMM_SELF, EM_ERR_USER,
+               "Output imaginary array is null.");
+
+    std::vector<double> edgesN;
+    std::vector<double> nodes;
+    std::vector<PetscInt> row_ptr;
+    std::vector<PetscInt> col_idx;
+    std::vector<PetscReal> rhs_real_internal;
+    std::vector<PetscReal> rhs_imag_internal;
+    std::vector<PetscReal> data_real;
+    std::vector<PetscReal> data_imag;
+
+    PetscCall(prepare_fortran_upper_1based_inputs(
+        n_edges, n_nodes, n_upper_row_ptr, n_upper_values, edge_nodes_1based,
+        node_coords, upper_row_ptr, upper_col_idx, rhs_real, rhs_imag,
+        upper_real, upper_imag, edgesN, nodes, row_ptr, col_idx,
+        rhs_real_internal, rhs_imag_internal, data_real, data_imag));
+
+    PetscCall(solve_eg1(n_edges, n_nodes, static_cast<PetscInt>(row_ptr.size()),
+                        static_cast<PetscInt>(col_idx.size()), n_edges,
+                        static_cast<PetscInt>(data_real.size()), edgesN.data(),
+                        nodes.data(), row_ptr.data(), col_idx.data(),
+                        rhs_real_internal.data(), rhs_imag_internal.data(),
+                        data_real.data(), data_imag.data(), n_result, out_real,
+                        out_imag));
 
     PetscFunctionReturn(0);
 }
