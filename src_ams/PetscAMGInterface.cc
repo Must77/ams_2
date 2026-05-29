@@ -123,14 +123,15 @@ PetscErrorCode prepare_fortran_upper_1based_inputs(
     nodes.assign(node_coords, node_coords + n_nodes * 3);
 
     rhs_real_internal.assign(rhs_real, rhs_real + n_edges);
-    rhs_imag_internal.resize(n_edges);
-    for (PetscInt i = 0; i < n_edges; ++i) {
-        rhs_imag_internal[i] = -rhs_imag[i];
-    }
+    rhs_imag_internal.assign(rhs_imag, rhs_imag + n_edges);
 
     PetscCall(expand_upper_triangle_1based_to_full_csr(
         n_edges, n_upper_row_ptr, n_upper_values, upper_row_ptr, upper_col_idx,
         upper_real, upper_imag, row_ptr, col_idx, data_real, data_imag));
+    // Use xi_internal = -xi_physical so the AMS helper matrix is Kr - Ki.
+    for (PetscInt i = 0; i < static_cast<PetscInt>(data_imag.size()); ++i) {
+        data_imag[i] = -data_imag[i];
+    }
 
     PetscFunctionReturn(0);
 }
@@ -734,6 +735,10 @@ PetscErrorCode solve_eg1_fortran_upper_1based(
                         rhs_real_internal.data(), rhs_imag_internal.data(),
                         data_real.data(), data_imag.data(), n_result, out_real,
                         out_imag));
+
+    for (PetscInt i = 0; i < n_result; ++i) {
+        out_imag[i] = -out_imag[i];
+    }
 
     PetscFunctionReturn(0);
 }

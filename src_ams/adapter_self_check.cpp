@@ -61,7 +61,9 @@ int main(int argc, char** argv) {
     const std::vector<double> expected_nodes = {0, 0, 0, 1, 0, 0, 1, 1,
                                                 0, 0, 1, 0, 0, 0, 1};
     const std::vector<PetscReal> expected_rhs_real = {100, 200, 300, 400};
-    const std::vector<PetscReal> expected_rhs_imag = {-10, -20, -30, -40};
+    const std::vector<PetscReal> expected_rhs_imag = {10, 20, 30, 40};
+    const std::vector<PetscReal> expected_prepared_imag = {-1, -2, -3, -4, -2,
+                                                           -5, -6, -4, -6, -7};
 
     PetscCheck(edgesN == expected_edgesN, PETSC_COMM_SELF, EM_ERR_USER,
                "Prepared edge-to-node array does not match zero-based input.");
@@ -74,11 +76,12 @@ int main(int argc, char** argv) {
     PetscCheck(rhs_real_internal == expected_rhs_real, PETSC_COMM_SELF,
                EM_ERR_USER, "Prepared RHS real array does not match input.");
     PetscCheck(rhs_imag_internal == expected_rhs_imag, PETSC_COMM_SELF,
-               EM_ERR_USER, "Prepared RHS imaginary array was not negated.");
+               EM_ERR_USER, "Prepared RHS imaginary array does not match input.");
     PetscCheck(data_real == expected_real, PETSC_COMM_SELF, EM_ERR_USER,
                "Prepared real values do not match expected full CSR.");
-    PetscCheck(data_imag == expected_imag, PETSC_COMM_SELF, EM_ERR_USER,
-               "Prepared imaginary values do not match expected full CSR.");
+    PetscCheck(data_imag == expected_prepared_imag, PETSC_COMM_SELF,
+               EM_ERR_USER,
+               "Prepared imaginary values do not match internal sign.");
 
     PetscCall(PetscFinalize());
     return 0;

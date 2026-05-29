@@ -169,6 +169,39 @@ void read_solution(const std::string& path, PetscInt expected_edges,
     }
 }
 
+void report_solution_error(const char* prefix, const std::vector<PetscReal>& real,
+                           const std::vector<PetscReal>& imag,
+                           const std::vector<PetscReal>& expected_real,
+                           const std::vector<PetscReal>& expected_imag) {
+    long double diff2 = 0;
+    long double ref2 = 0;
+    PetscReal max_abs = 0;
+    PetscInt max_idx = 0;
+    for (PetscInt i = 0; i < static_cast<PetscInt>(real.size()); ++i) {
+        const long double dr = real[i] - expected_real[i];
+        const long double di = imag[i] - expected_imag[i];
+        const long double er = expected_real[i];
+        const long double ei = expected_imag[i];
+        const PetscReal abs_diff =
+            static_cast<PetscReal>(std::sqrt(dr * dr + di * di));
+        if (abs_diff > max_abs) {
+            max_abs = abs_diff;
+            max_idx = i;
+        }
+        diff2 += dr * dr + di * di;
+        ref2 += er * er + ei * ei;
+    }
+
+    const PetscReal rel_l2 =
+        ref2 > 0 ? static_cast<PetscReal>(std::sqrt(diff2 / ref2)) : 0;
+    PetscCallAbort(PETSC_COMM_WORLD,
+                   PetscPrintf(PETSC_COMM_WORLD, "%s_relative_l2 %.16e\n",
+                               prefix, static_cast<double>(rel_l2)));
+    PetscCallAbort(PETSC_COMM_WORLD,
+                   PetscPrintf(PETSC_COMM_WORLD, "%s_max_abs %.16e at %d\n",
+                               prefix, static_cast<double>(max_abs), max_idx));
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -262,6 +295,8 @@ int main(int argc, char** argv) {
                 ? static_cast<PetscReal>(std::sqrt(ref_residual2 / rhs_norm2))
                 : 0;
 
+        PetscCall(
+            PetscPrintf(PETSC_COMM_WORLD, "running_fortran_upper_solve\n"));
         std::vector<PetscReal> out_real(n_edges);
         std::vector<PetscReal> out_imag(n_edges);
         PetscCall(solve_eg1_fortran_upper_1based(
@@ -271,28 +306,6 @@ int main(int argc, char** argv) {
             upper_real.data(), upper_imag.data(), n_edges, out_real.data(),
             out_imag.data()));
 
-        long double diff2 = 0;
-        long double ref2 = 0;
-        PetscReal max_abs = 0;
-        PetscInt max_idx = 0;
-        for (PetscInt i = 0; i < n_edges; ++i) {
-            const long double dr = out_real[i] - expected_real[i];
-            const long double di = out_imag[i] - expected_imag[i];
-            const long double er = expected_real[i];
-            const long double ei = expected_imag[i];
-            const PetscReal abs_diff =
-                static_cast<PetscReal>(std::sqrt(dr * dr + di * di));
-            if (abs_diff > max_abs) {
-                max_abs = abs_diff;
-                max_idx = i;
-            }
-            diff2 += dr * dr + di * di;
-            ref2 += er * er + ei * ei;
-        }
-
-        const PetscReal rel_l2 =
-            ref2 > 0 ? static_cast<PetscReal>(std::sqrt(diff2 / ref2)) : 0;
-
         PetscCall(PetscPrintf(PETSC_COMM_WORLD, "n_edges %d\n", n_edges));
         PetscCall(PetscPrintf(PETSC_COMM_WORLD, "n_nodes %d\n", n_nodes));
         PetscCall(PetscPrintf(PETSC_COMM_WORLD,
@@ -301,10 +314,8 @@ int main(int argc, char** argv) {
         PetscCall(PetscPrintf(PETSC_COMM_WORLD,
                               "reference_max_abs_residual %.16e\n",
                               static_cast<double>(ref_max_residual)));
-        PetscCall(PetscPrintf(PETSC_COMM_WORLD, "solve_relative_l2 %.16e\n",
-                              static_cast<double>(rel_l2)));
-        PetscCall(PetscPrintf(PETSC_COMM_WORLD, "solve_max_abs %.16e at %d\n",
-                              static_cast<double>(max_abs), max_idx));
+        report_solution_error("solve", out_real, out_imag, expected_real,
+                              expected_imag);
     } catch (const std::exception& e) {
         SETERRQ(PETSC_COMM_SELF, EM_ERR_USER, "%s", e.what());
     }

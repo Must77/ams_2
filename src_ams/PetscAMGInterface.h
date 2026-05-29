@@ -76,8 +76,9 @@ using namespace std;
                               const PetscReal *data_real, const PetscReal *data_imag,
                               PetscInt n_result, PetscReal *out_real, PetscReal *out_imag);
 
-    // rhs_imag follows the Fortran caller's physical imaginary part; this
-    // adapter negates it for the internal real block system.
+    // rhs_imag follows the Fortran caller's physical imaginary part. The
+    // adapter solves an equivalent internal system with the imaginary
+    // unknown negated, then converts the output back to the caller's sign.
     PetscErrorCode solve_eg1_fortran_upper_1based(
         PetscInt n_edges, PetscInt n_nodes, PetscInt n_upper_row_ptr,
         PetscInt n_upper_values, const PetscInt *edge_nodes_1based,
