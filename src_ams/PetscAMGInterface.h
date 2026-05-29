@@ -3,6 +3,7 @@
 #include "em_ctx.h"
 #include <iostream>
 #include <fstream>
+#include <vector>
 using namespace std;
 
 
@@ -10,6 +11,13 @@ using namespace std;
     PetscErrorCode test2Dim2(EMContext *ctx);
 
     PetscErrorCode testeg1(EMContext *ctx);
+
+    PetscErrorCode expand_upper_triangle_1based_to_full_csr(
+        PetscInt n_rows, PetscInt n_upper_row_ptr, PetscInt n_upper_values,
+        const PetscInt *upper_row_ptr, const PetscInt *upper_col_idx,
+        const PetscReal *upper_real, const PetscReal *upper_imag,
+        std::vector<PetscInt> &row_ptr, std::vector<PetscInt> &col_idx,
+        std::vector<PetscReal> &data_real, std::vector<PetscReal> &data_imag);
 
     PetscErrorCode load_context_from_arrays(EMContext *ctx, PetscInt n_edges, PetscInt n_nodes,
                                             PetscInt n_row_ptr, PetscInt n_col_idx, PetscInt n_rhs,
