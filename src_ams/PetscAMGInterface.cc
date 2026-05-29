@@ -1,5 +1,90 @@
 #include "PetscAMGInterface.h"
 
+PetscErrorCode expand_upper_triangle_1based_to_full_csr(
+    PetscInt n_rows, PetscInt n_upper_row_ptr, PetscInt n_upper_values,
+    const PetscInt* upper_row_ptr, const PetscInt* upper_col_idx,
+    const PetscReal* upper_real, const PetscReal* upper_imag,
+    std::vector<PetscInt>& row_ptr, std::vector<PetscInt>& col_idx,
+    std::vector<PetscReal>& data_real, std::vector<PetscReal>& data_imag) {
+    PetscFunctionBegin;
+
+    PetscCheck(n_rows >= 0, PETSC_COMM_SELF, EM_ERR_USER,
+               "Matrix row count must be non-negative.");
+    PetscCheck(n_upper_row_ptr == n_rows + 1, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle row pointer length must equal n_rows + 1.");
+    PetscCheck(n_upper_values >= 0, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle value count must be non-negative.");
+    PetscCheck(upper_row_ptr, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle row pointer array is null.");
+    PetscCheck(upper_col_idx, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle column index array is null.");
+    PetscCheck(upper_real, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle real value array is null.");
+    PetscCheck(upper_imag, PETSC_COMM_SELF, EM_ERR_USER,
+               "Upper-triangle imaginary value array is null.");
+    PetscCheck(upper_row_ptr[0] == 1, PETSC_COMM_SELF, EM_ERR_USER,
+               "Fortran upper-triangle row pointer must be 1-based.");
+    PetscCheck(upper_row_ptr[n_rows] == n_upper_values + 1, PETSC_COMM_SELF,
+               EM_ERR_USER,
+               "Last Fortran upper-triangle row pointer must be n_values + 1.");
+
+    std::vector<PetscInt> row_counts(n_rows, 0);
+    for (PetscInt r = 0; r < n_rows; ++r) {
+        const PetscInt begin = upper_row_ptr[r] - 1;
+        const PetscInt end = upper_row_ptr[r + 1] - 1;
+        PetscCheck(begin <= end, PETSC_COMM_SELF, EM_ERR_USER,
+                   "Upper-triangle row pointer must be monotonic.");
+        PetscCheck(begin >= 0 && end <= n_upper_values, PETSC_COMM_SELF,
+                   EM_ERR_USER,
+                   "Upper-triangle row pointer is outside value array.");
+
+        for (PetscInt k = begin; k < end; ++k) {
+            const PetscInt c = upper_col_idx[k] - 1;
+            PetscCheck(c >= 0 && c < n_rows, PETSC_COMM_SELF, EM_ERR_USER,
+                       "Upper-triangle column index is outside matrix.");
+            PetscCheck(c >= r, PETSC_COMM_SELF, EM_ERR_USER,
+                       "Upper-triangle input contains a lower-triangle entry.");
+
+            ++row_counts[r];
+            if (c != r) {
+                ++row_counts[c];
+            }
+        }
+    }
+
+    row_ptr.assign(n_rows + 1, 0);
+    for (PetscInt r = 0; r < n_rows; ++r) {
+        row_ptr[r + 1] = row_ptr[r] + row_counts[r];
+    }
+
+    const PetscInt n_full_values = row_ptr[n_rows];
+    col_idx.assign(n_full_values, 0);
+    data_real.assign(n_full_values, 0);
+    data_imag.assign(n_full_values, 0);
+
+    std::vector<PetscInt> offsets = row_ptr;
+    for (PetscInt r = 0; r < n_rows; ++r) {
+        const PetscInt begin = upper_row_ptr[r] - 1;
+        const PetscInt end = upper_row_ptr[r + 1] - 1;
+        for (PetscInt k = begin; k < end; ++k) {
+            const PetscInt c = upper_col_idx[k] - 1;
+            PetscInt out = offsets[r]++;
+            col_idx[out] = c;
+            data_real[out] = upper_real[k];
+            data_imag[out] = upper_imag[k];
+
+            if (c != r) {
+                out = offsets[c]++;
+                col_idx[out] = r;
+                data_real[out] = upper_real[k];
+                data_imag[out] = upper_imag[k];
+            }
+        }
+    }
+
+    PetscFunctionReturn(0);
+}
+
 PetscErrorCode test2Dim2(EMContext* ctx) {
     PetscFunctionBegin;
 
