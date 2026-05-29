@@ -19,6 +19,18 @@ using namespace std;
         std::vector<PetscInt> &row_ptr, std::vector<PetscInt> &col_idx,
         std::vector<PetscReal> &data_real, std::vector<PetscReal> &data_imag);
 
+    PetscErrorCode prepare_fortran_upper_1based_inputs(
+        PetscInt n_edges, PetscInt n_nodes, PetscInt n_upper_row_ptr,
+        PetscInt n_upper_values, const PetscInt *edge_nodes_1based,
+        const double *node_coords, const PetscInt *upper_row_ptr,
+        const PetscInt *upper_col_idx, const PetscReal *rhs_real,
+        const PetscReal *rhs_imag, const PetscReal *upper_real,
+        const PetscReal *upper_imag, std::vector<double> &edgesN,
+        std::vector<double> &nodes, std::vector<PetscInt> &row_ptr,
+        std::vector<PetscInt> &col_idx, std::vector<PetscReal> &rhs_real_internal,
+        std::vector<PetscReal> &rhs_imag_internal,
+        std::vector<PetscReal> &data_real, std::vector<PetscReal> &data_imag);
+
     PetscErrorCode load_context_from_arrays(EMContext *ctx, PetscInt n_edges, PetscInt n_nodes,
                                             PetscInt n_row_ptr, PetscInt n_col_idx, PetscInt n_rhs,
                                             PetscInt n_values, const double *edgesN, const double *nodes,
@@ -63,6 +75,17 @@ using namespace std;
                               const PetscReal *rhs_real, const PetscReal *rhs_imag,
                               const PetscReal *data_real, const PetscReal *data_imag,
                               PetscInt n_result, PetscReal *out_real, PetscReal *out_imag);
+
+    // rhs_imag follows the Fortran caller's physical imaginary part; this
+    // adapter negates it for the internal real block system.
+    PetscErrorCode solve_eg1_fortran_upper_1based(
+        PetscInt n_edges, PetscInt n_nodes, PetscInt n_upper_row_ptr,
+        PetscInt n_upper_values, const PetscInt *edge_nodes_1based,
+        const double *node_coords, const PetscInt *upper_row_ptr,
+        const PetscInt *upper_col_idx, const PetscReal *rhs_real,
+        const PetscReal *rhs_imag, const PetscReal *upper_real,
+        const PetscReal *upper_imag, PetscInt n_result, PetscReal *out_real,
+        PetscReal *out_imag);
 
     // PetscErrorCode initAMS();
 
