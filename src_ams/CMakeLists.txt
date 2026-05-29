@@ -88,3 +88,6 @@ TARGET_LINK_LIBRARIES(FemAms ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY
 
 ADD_EXECUTABLE(AdapterSelfCheck adapter_self_check.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
 TARGET_LINK_LIBRARIES(AdapterSelfCheck ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+
+ADD_EXECUTABLE(UpperExampleCheck upper_example_check.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
+TARGET_LINK_LIBRARIES(UpperExampleCheck ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
