@@ -83,17 +83,22 @@ INCLUDE_DIRECTORIES(${MPI_C_INCLUDE_PATH} ${PETSC_INCLUDE_DIR} ${TETGEN_INCLUDE_
 ADD_DEFINITIONS(-DTETLIBRARY)
 
 
-ADD_EXECUTABLE(FemAms main.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
-TARGET_LINK_LIBRARIES(FemAms ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+# 求解器核心静态库：各可执行文件共享同一份目标文件，
+ADD_LIBRARY(AmsCore STATIC PetscAMGInterface.cc em_ctx.cc em_utils.cc)
+TARGET_LINK_LIBRARIES(AmsCore ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
 
-ADD_EXECUTABLE(AdapterSelfCheck adapter_self_check.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
-TARGET_LINK_LIBRARIES(AdapterSelfCheck ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+ADD_EXECUTABLE(FemAms main.cpp)
+TARGET_LINK_LIBRARIES(FemAms AmsCore)
 
-ADD_EXECUTABLE(UpperExampleCheck upper_example_check.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
-TARGET_LINK_LIBRARIES(UpperExampleCheck ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+ADD_EXECUTABLE(AdapterSelfCheck adapter_self_check.cpp)
+TARGET_LINK_LIBRARIES(AdapterSelfCheck AmsCore)
 
-ADD_EXECUTABLE(UpperDumpSystem upper_dump_system.cpp PetscAMGInterface.cc em_ctx.cc em_utils.cc)
-TARGET_LINK_LIBRARIES(UpperDumpSystem ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+ADD_EXECUTABLE(UpperExampleCheck upper_example_check.cpp)
+TARGET_LINK_LIBRARIES(UpperExampleCheck AmsCore)
+
+ADD_EXECUTABLE(UpperDumpSystem upper_dump_system.cpp)
+TARGET_LINK_LIBRARIES(UpperDumpSystem AmsCore)
 
 ADD_EXECUTABLE(AmsLab ams_lab.cpp)
 TARGET_LINK_LIBRARIES(AmsLab ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
+
