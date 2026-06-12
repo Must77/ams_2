@@ -316,6 +316,14 @@ int main(int argc, char** argv) {
                               static_cast<double>(ref_max_residual)));
         report_solution_error("solve", out_real, out_imag, expected_real,
                               expected_imag);
+
+        {
+            std::ofstream out("ams_solution.txt");
+            out.precision(16);
+            for (PetscInt i = 0; i < n_edges; ++i) {
+                out << out_real[i] << " " << out_imag[i] << "\n";
+            }
+        }
     } catch (const std::exception& e) {
         SETERRQ(PETSC_COMM_SELF, EM_ERR_USER, "%s", e.what());
     }

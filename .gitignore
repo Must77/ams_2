@@ -1,3 +1,6 @@
 # Local rebuild and verification artifacts generated on naisha.
 /build_ubuntu/
 /run_ubuntu_eg1/
+# Solver run artifacts.
+/ams_solution.txt
+*group-000.log
