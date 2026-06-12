@@ -133,6 +133,39 @@ PetscErrorCode prepare_fortran_upper_1based_inputs(
         data_imag[i] = -data_imag[i];
     }
 
+    // Optional: undo a symmetric edge-length scaling of the input system.
+    // Callers that assemble with unit-tangential-normalized edge bases
+    // provide A_data = diag(len) * A_whitney * diag(len). Solving the
+    // unscaled Whitney system keeps the AMS discrete gradient at +-1,
+    // which matches the verified eg_1 configuration. The paired solution
+    // back-transform lives in solve_eg1_fortran_upper_1based().
+    PetscBool unscale_len = PETSC_FALSE;
+    PetscCall(PetscOptionsGetBool(NULL, NULL, "-fortran_upper_unscale_edge_len",
+                                  &unscale_len, NULL));
+    if (unscale_len) {
+        std::vector<PetscReal> elen(n_edges);
+        for (PetscInt e = 0; e < n_edges; ++e) {
+            const PetscInt a = edge_nodes_1based[e * 2 + 0] - 1;
+            const PetscInt b = edge_nodes_1based[e * 2 + 1] - 1;
+            const double dx = node_coords[b * 3 + 0] - node_coords[a * 3 + 0];
+            const double dy = node_coords[b * 3 + 1] - node_coords[a * 3 + 1];
+            const double dz = node_coords[b * 3 + 2] - node_coords[a * 3 + 2];
+            elen[e] = (PetscReal)std::sqrt(dx * dx + dy * dy + dz * dz);
+            PetscCheck(elen[e] > 0, PETSC_COMM_SELF, EM_ERR_USER,
+                       "Zero-length edge prevents edge-length unscaling.");
+        }
+        for (PetscInt r = 0; r < n_edges; ++r) {
+            const PetscReal inv_r = 1.0 / elen[r];
+            rhs_real_internal[r] *= inv_r;
+            rhs_imag_internal[r] *= inv_r;
+            for (PetscInt k = row_ptr[r]; k < row_ptr[r + 1]; ++k) {
+                const PetscReal f = inv_r / elen[col_idx[k]];
+                data_real[k] *= f;
+                data_imag[k] *= f;
+            }
+        }
+    }
+
     PetscFunctionReturn(0);
 }
 
@@ -738,6 +771,25 @@ PetscErrorCode solve_eg1_fortran_upper_1based(
 
     for (PetscInt i = 0; i < n_result; ++i) {
         out_imag[i] = -out_imag[i];
+    }
+
+    // Paired back-transform for -fortran_upper_unscale_edge_len:
+    // x_caller = diag(1/len) * x_whitney.
+    PetscBool unscale_len = PETSC_FALSE;
+    PetscCall(PetscOptionsGetBool(NULL, NULL, "-fortran_upper_unscale_edge_len",
+                                  &unscale_len, NULL));
+    if (unscale_len) {
+        for (PetscInt e = 0; e < n_result; ++e) {
+            const PetscInt a = edge_nodes_1based[e * 2 + 0] - 1;
+            const PetscInt b = edge_nodes_1based[e * 2 + 1] - 1;
+            const double dx = node_coords[b * 3 + 0] - node_coords[a * 3 + 0];
+            const double dy = node_coords[b * 3 + 1] - node_coords[a * 3 + 1];
+            const double dz = node_coords[b * 3 + 2] - node_coords[a * 3 + 2];
+            const PetscReal len =
+                (PetscReal)std::sqrt(dx * dx + dy * dy + dz * dz);
+            out_real[e] /= len;
+            out_imag[e] /= len;
+        }
     }
 
     PetscFunctionReturn(0);
