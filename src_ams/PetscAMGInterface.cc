@@ -376,6 +376,10 @@ PetscErrorCode setup_ams(EMContext* ctx) {
         ctx->v_coords[i * 3 + 2] = ctx->nodes[i * 3 + 2];
     }
 
+    // G 已组装（拷贝语义）、坐标已转存 v_coords，原始拓扑数组不再需要
+    std::vector<double>().swap(ctx->edgesN);
+    std::vector<double>().swap(ctx->nodes);
+
     PetscFunctionReturn(0);
 }
 
@@ -389,17 +393,12 @@ PetscErrorCode create_linear_system(EMContext* ctx) {
     cout << "ndim: " << ndim << endl;
     cout << "nzeros: " << ctx->cidx.size() << endl;
 
-    PetscCall(MatCreateMPIAIJWithArrays(
-        ctx->group_comm, ndim, ndim, PETSC_DECIDE, PETSC_DECIDE, &ctx->rptr[0],
-        &ctx->cidx[0], NULL, &ctx->C));
-    PetscCall(MatDuplicate(ctx->C, MAT_SHARE_NONZERO_PATTERN, &ctx->M));
-
-    PetscCall(VecCreateMPI(ctx->group_comm, ndim, PETSC_DECIDE, &ctx->s.re));
-    PetscCall(VecDuplicate(ctx->s.re, &ctx->s.im));
-    PetscCall(VecDuplicate(ctx->s.re, &ctx->dual_e.re));
+    // C/M 由 assemble_matrix 创建，s 由 assemble_rhs_csem 创建；
+    // 此处不再预建骨架，否则句柄被覆盖时原对象泄漏（C+M 约 230MB）
+    PetscCall(VecCreateMPI(ctx->group_comm, ndim, PETSC_DECIDE, &ctx->dual_e.re));
     PetscCall(VecDuplicate(ctx->dual_e.re, &ctx->dual_e.im));
 
-    PetscCall(VecDuplicate(ctx->s.re, &ctx->w));
+    PetscCall(VecDuplicate(ctx->dual_e.re, &ctx->w));
 
     if ((InnerPCType)ctx->inner_pc_type == AMS) {
         ctx->use_ams = PETSC_TRUE;
@@ -414,7 +413,6 @@ PetscErrorCode assemble_matrix(EMContext* ctx) {
     PetscFunctionBegin;
 
     int ndim = ctx->rptr.size() - 1;
-    int nzeros = ctx->cidx.size();
     PetscCall(MatCreateMPIAIJWithArrays(
         ctx->group_comm, ndim, ndim, PETSC_DECIDE, PETSC_DECIDE, &ctx->rptr[0],
         &ctx->cidx[0], &ctx->data_real[0], &ctx->C));
@@ -426,6 +424,13 @@ PetscErrorCode assemble_matrix(EMContext* ctx) {
     PetscCall(MatAssemblyEnd(ctx->C, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyBegin(ctx->M, MAT_FINAL_ASSEMBLY));
     PetscCall(MatAssemblyEnd(ctx->M, MAT_FINAL_ASSEMBLY));
+
+    // MatCreateMPIAIJWithArrays 为拷贝语义，组装结束后 ctx 持有的 CSR
+    // 数据不再被 PETSc 引用，立即释放（cidx+data_real+data_imag 约 224MB）。
+    // rptr 还要给 create_pc/assemble_rhs_csem 提供尺寸，留到 assemble_rhs_csem 释放
+    std::vector<PetscInt>().swap(ctx->cidx);
+    std::vector<PetscReal>().swap(ctx->data_real);
+    std::vector<PetscReal>().swap(ctx->data_imag);
 
     PetscFunctionReturn(0);
 }
@@ -440,6 +445,10 @@ PetscErrorCode assemble_rhs_csem(EMContext* ctx) {
     PetscCall(VecAssemblyEnd(ctx->s.re));
     PetscCall(VecAssemblyBegin(ctx->s.im));
     PetscCall(VecAssemblyEnd(ctx->s.im));
+
+    // 本函数是 rptr 的最后一个消费者（create_pc 在此之前已读完尺寸），释放。
+    // b_real/b_imag 被 VecCreateMPIWithArray 引用（非拷贝），必须保留到 destroy
+    std::vector<PetscInt>().swap(ctx->rptr);
 
     PetscFunctionReturn(0);
 }

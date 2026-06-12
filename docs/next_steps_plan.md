@@ -8,7 +8,7 @@
 **维护规则：完成或推翻下列任何一项的提交，必须在同一提交中更新本节。**
 本节为唯一的进度真相源；正文各节描述"怎么做"，不描述"做没做"。
 
-- [ ] 1a 消除双重持有（ctx 数组组装后释放）
+- [x] 1a 消除双重持有（ctx 数组组装后释放；另修复 C/M/s 重复创建泄漏，实测见 §1a）
 - [ ] 1b 外层 restart 降档实验与落地
 - [ ] 1c C/M 改 SBAIJ（可选深化）
 - [ ] 2 dual-mode 验证关闭（含改打印文案）
@@ -18,10 +18,10 @@
 - [ ] 3d CMake 静态库重构
 - [ ] 4-探针 PETSc Fortran stub 覆盖度检查（决定纯 Fortran 路线）
 - [ ] 4 纯 Fortran 移植（探针通过后细化）
-- [ ] 运维：push 到 origin/dev（等凭据）
+- [x] 运维：push 到 origin/dev（2026-06-13 完成；凭据已存 credential.helper store，后续可直接 push）
 - [ ] 运维：沟通包发给对方（5 点见 §0）
 
-最后更新：2026-06-13，求解器打通后初始状态。
+最后更新：2026-06-13，1a 完成并实测。
 
 ## 0. 现状快照
 
@@ -35,7 +35,7 @@
     -ams_beta_mass_shift 1e-6 -B_ksp_type gmres -B_ksp_max_it 15 \
     -em_outer_max_it 60 -em_outer_rtol 1e-7
   ```
-  单核约 35 分钟（含 ~5 分钟文本解析），峰值 RSS ~3.2GB。
+  单核实测 ~8 分钟（2026-06-13 1a 后；更早记录为 35 分钟），峰值 RSS 2.38GB（1a 后实测）。
 - **回归基线**（任何改动后必须全过）：
   1. `cd exmaple/eg_1 && ../../build_ubuntu/FemAms`，`result.txt` 的 sha256 必须是
      `342042dbcff12d00a13339367327a851158f0dc137f6af5caa1ee6779e9fd266`
@@ -69,20 +69,27 @@
 | 外层 FGMRES V+Z 双基（restart 30 × 1.36M × 8B × 2）| ~650MB | 1b 降 restart |
 | 内层 GMRES 基 + 杂项向量 | ~300MB | 顺带观察 |
 
-### 1a 消除双重持有（首做，收益 ~460MB 峰值）
+### 1a 消除双重持有（2026-06-13 完成）
 - 事实：`assemble_matrix()` 用 `MatCreateMPIAIJWithArrays`（**拷贝语义**，PETSc 文档确认 MPIAIJ
-  变体复制数据）建 C/M（PetscAMGInterface.cc ~387/390 行，骨架在 ~361）。
-- 改法：C/M 组装完成（MatAssemblyEnd 后）即释放 `ctx->data_real/data_imag/cidx/rptr`
-  （`std::vector<T>().swap(v)`）；`ctx->b_real/b_imag` 在 `assemble_rhs_csem` 后同理；
-  adapter 层（`solve_eg1_fortran_upper_1based` 中的局部 vector）在 `solve_eg1` 返回后自动析构，
-  但 `prepare_fortran_upper_1based_inputs` 输出与 `solve_eg1` 入参之间的生命周期重叠无法避免——
-  可把 prepare 的输出 move 进 solve（需改签名为 vector&&或在 prepare 内部就地缩减 upper 数组）。
-  第一刀先做 ctx 释放（不改签名、零风险）。
-- 验证点：`matshell_mult_a` 只用 Mat C/M（已确认）；检查 `copy_result_to_arrays`、
-  `destroy_*` 不再触碰已释放向量；`setup_ams` 用 `ctx->edgesN/nodes`（G 与坐标），
-  这两个数组在 create_pc 之后才能释放。
-- 计量：`/usr/bin/time -v ./build_ubuntu/UpperExampleCheck ...` 记录 Maximum resident set size，
-  与基线 3.2GB 对比。
+  变体复制数据）建 C/M。
+- **实施时的两个新发现（比原计划多修的泄漏）**：
+  1. `create_linear_system()` 原先用 NULL 值预建骨架 C + MatDuplicate 出 M，随后
+     `assemble_matrix()` 重新 MatCreate 覆盖句柄而未销毁 → 骨架 C/M（约 230MB）纯泄漏；
+     `s.re/s.im` 同样被 `assemble_rhs_csem` 的 VecCreateMPIWithArray 二次创建覆盖（约 22MB）。
+     修复：create_linear_system 不再预建 C/M/s，dual_e/w 改由 VecCreateMPI 直接创建。
+  2. **原计划"`ctx->b_real/b_imag` 在 assemble_rhs_csem 后同理释放"是错的**：
+     `assemble_rhs_csem` 用 `VecCreateMPIWithArray`（**引用语义**，不拷贝），s.re/s.im 全程
+     直接引用 ctx->b_real/b_imag 的内存，释放即悬垂指针。两数组必须保留到 destroy。
+- 实际改法（全在 PetscAMGInterface.cc）：`assemble_matrix` 末尾释放 cidx/data_real/data_imag
+  （约 224MB，`std::vector<T>().swap(v)`）；rptr 因 create_pc/assemble_rhs_csem 还要读尺寸，
+  延至 `assemble_rhs_csem` 末尾释放；`setup_ams` 末尾释放 edgesN/nodes（G 已组装、坐标已转存
+  v_coords，约 27MB）。v_coords 因 PCSetCoordinates 拷贝语义未查证，保守未释放（16MB）。
+- 仍未做（可选深化）：adapter 层局部 vector 与 ctx 拷贝的生命周期重叠（~230MB），需把
+  prepare 的输出 move 进 solve（改签名）。若 1b 后仍未达 2GB 目标再做。
+- 实测（2026-06-13）：峰值 RSS 基线 ~3.2GB（run9，未留 time -v 精确值）→ **2.38GB**
+  （2497024KB），墙钟 7m54s（此前文档估 35 分钟，差异可能来自内存压力降低或原估值偏保守）。
+  四项回归全过：eg_1 黄金哈希、AdapterSelfCheck、大算例 reference_relative_residual
+  精确不变 + solve_relative_l2=0.690、代回残差法证 7.140e-8（高 σ 区 3.1678e-05，与修改前一致）。
 
 ### 1b 外层 restart 降档（一行/纯选项，收益 ~325MB）
 - 先用选项实验：标准命令加 `-A_ksp_gmres_restart 15`。注意外层在 run9 配置下 ~37 步收敛，
