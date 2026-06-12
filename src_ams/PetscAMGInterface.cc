@@ -550,6 +550,36 @@ PetscErrorCode create_pc(EMContext* ctx) {
         PetscCall(PCHYPRESetDiscreteGradient(B_pc, ctx->G));
         PetscCall(PCSetCoordinates(B_pc, 3, (PetscInt)ctx->v_coords.size() / 3,
                                    &ctx->v_coords[0]));
+
+        // Optional: hand AMS a cancellation-free beta Poisson matrix
+        // G^T * M * G (mass/conductivity part only). With 8-digit input
+        // data the default G^T * B * G suffers curl-curl cancellation
+        // noise that can exceed the tiny air-region sigma signal and
+        // produce negative diagonals, which break the internal AMG.
+        PetscBool beta_mass = PETSC_FALSE;
+        PetscCall(PetscOptionsGetBool(NULL, NULL, "-ams_beta_mass_poisson",
+                                      &beta_mass, NULL));
+        if (beta_mass) {
+            // Work on a copy: ctx->M is part of the actual operator and
+            // must stay untouched. A tiny diagonal shift caps the air/
+            // ground conductivity contrast seen by the internal AMG;
+            // values 1e-8..1e-2 all behave identically (preconditioner
+            // only, the outer Krylov still solves the exact system).
+            Mat Mshift, Abeta;
+            PetscReal shift_rel = 1e-6, mnorm;
+            PetscCall(PetscOptionsGetReal(NULL, NULL, "-ams_beta_mass_shift",
+                                          &shift_rel, NULL));
+            PetscCall(MatDuplicate(ctx->M, MAT_COPY_VALUES, &Mshift));
+            if (shift_rel > 0) {
+                PetscCall(MatNorm(Mshift, NORM_INFINITY, &mnorm));
+                PetscCall(MatShift(Mshift, shift_rel * mnorm));
+            }
+            PetscCall(MatPtAP(Mshift, ctx->G, MAT_INITIAL_MATRIX, 2.0,
+                              &Abeta));
+            PetscCall(PCHYPRESetBetaPoissonMatrix(B_pc, Abeta));
+            PetscCall(MatDestroy(&Abeta));
+            PetscCall(MatDestroy(&Mshift));
+        }
     } else {
         PetscCall(KSPSetType(ctx->B_ksp, KSPPREONLY));
         // PetscCall(PCSetType(B_pc, PCCHOLESKY));
