@@ -369,3 +369,36 @@ solve_max_abs 8.2725335557340852e-11 at 339939
 ## 给接手者的一句话摘要
 
 新 full CSR 数据和上三角数据已经确认一致，`slove.txt` 也确实是这组 A/b 的直接解；但当前 cpp AMS 求解路径用原物理符号会输出全 0，用内部符号能迭代但停在 `1e-6` 量级，不能复现直接解。下一步应集中排查 AMS 的 G/coords、edge 顺序、边界条件/重排和 PETSc/Hypre 参数是否和对方原运行一致，而不是先做 Fortran 绑定。
+
+---
+
+## 2026-06-13 重大进展：AMS 路径已打通（新机器 MaginaLaptop）
+
+### 根因（三层，全部确诊并修复）
+
+1. **边长对称缩放**：对方矩阵为 `A_data = diag(len)·A_whitney·diag(len)`（单位切向归一化边基 vs 本代码的 Whitney 环量基）。从数据反解出缩放因子与 1/边长以 8 位精度吻合。修复：adapter 选项 `-fortran_upper_unscale_edge_len` 反缩放回 Whitney 约定（解返回前配对除以边长）。
+2. **β Poisson 消去噪声**：数据仅 8 位有效数字，`GᵀKrG≡0` 的消去残留 ~1e-8 噪声盖过空气层 σ 信号，默认 `GᵀBG` 出现 17120 个负对角 → hypre 内部 AMG 产生 NaN。修复：选项 `-ams_beta_mass_poisson` 手工构造无噪声 `Aβ=GᵀMG` 喂 `PCHYPRESetBetaPoissonMatrix`。
+3. **极端 σ 对比（~1e12）**：β-AMG 对跳系数失效，内层停滞 6e-2。修复：选项 `-ams_beta_mass_shift`（默认 1e-6，1e-8~1e-2 均可）对 PC 用的 M 副本加微小对角位移，内层变 3 步收敛。另内层须用 `-B_ksp_type gmres`（FCG 在近奇异模态会误报 INDEFINITE 提前退出）。
+
+### 验收结论（关键认知）
+
+- AMS 解代回原方程真实相对残差 **7.1e-8**，优于 slove.txt 的 6.8e-7。
+- 与 slove.txt 的全局 L2 差 0.69 **不是错误**：100% 位于低 σ（空气）边、96% 为纯梯度模态——这些模态物理上不可观测、对任何迭代法都不可定。高 σ（地下）区域两解吻合 3.2e-5。
+- **不要用全局 L2 对比 slove.txt 作验收**。改用：① 代回残差；② 高 σ 区域 L2；③ 接收点场值。若对方确实需要空气区数值一致，需做规范固定（如解后投影掉梯度分量），属后处理而非求解器问题。
+
+### 当前标准运行命令
+
+```bash
+./build_ubuntu/UpperExampleCheck ~/ams_example \
+  -fortran_upper_unscale_edge_len -ams_beta_mass_poisson \
+  -ams_beta_mass_shift 1e-6 -B_ksp_type gmres -B_ksp_max_it 15 \
+  -em_outer_max_it 60 -em_outer_rtol 1e-7
+```
+
+单核约 35 分钟（其中 ~5 分钟为 1.7G 文本解析）。所有新行为均为 opt-in 选项，默认路径与 eg_1 黄金回归字节级一致（sha256 342042...d266）。新增工具：`UpperDumpSystem`（系统转 PETSc 二进制）、`AmsLab`（秒级 PC 参数实验台）；新增外层控制选项 `-em_outer_max_it`/`-em_outer_rtol`（原硬编码 100/1e-9）。
+
+### 待向对方确认（更新版）
+
+1. 验收标准能否改为"代回残差 + 高 σ 区域/接收点比对"？
+2. 他们的旧 AMS 程序是否也只在导电区比对？（推测其基函数即单位切向归一，故其 G 天然匹配，无需反缩放）
+3. 若需空气区一致：确认其规范选择（直接解的梯度分量来自何种约定）。
