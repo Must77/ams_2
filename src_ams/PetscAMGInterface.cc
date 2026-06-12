@@ -868,7 +868,7 @@ PetscErrorCode solve_eg1(PetscInt n_edges, PetscInt n_nodes,
 
     PetscCall(assemble_rhs_csem(&ctx));  // 有端项目写入 pectc ，每次一个
 
-    PetscCall(PetscViewerASCIIPrintf(ctx.LS_log, "Solving for dual mode:\n"));
+    PetscCall(PetscViewerASCIIPrintf(ctx.LS_log, "Solving linear system:\n"));
     PetscCall(solve_linear_system(&ctx, ctx.s, ctx.dual_e, ctx.K_max_it,
                                   ctx.dual_rtol));  // 求解
 
