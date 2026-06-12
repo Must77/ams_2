@@ -9,8 +9,9 @@
 本节为唯一的进度真相源；正文各节描述"怎么做"，不描述"做没做"。
 
 - [x] 1a 消除双重持有（ctx 数组组装后释放；另修复 C/M/s 重复创建泄漏，实测见 §1a）
-- [ ] 1b 外层 restart 降档实验与落地
-- [ ] 1c C/M 改 SBAIJ（可选深化）
+- [x] 1b 外层 restart 降档实验与落地（restart 15 进标准命令而非代码默认，理由见 §1b）
+- [x] ~~1c C/M 改 SBAIJ（可选深化）~~ 划掉：阶段一目标 2GB 已达成（实测 2.08GB），
+      135MB 收益不抵 SBAIJ 改动面与 PtAP/hypre 兼容风险；若未来内存再紧再启
 - [ ] 2 dual-mode 验证关闭（含改打印文案）
 - [ ] 3a C 接口层 ams_c_api
 - [ ] 3b Fortran 绑定模块
@@ -21,7 +22,7 @@
 - [x] 运维：push 到 origin/dev（2026-06-13 完成；凭据已存 credential.helper store，后续可直接 push）
 - [ ] 运维：沟通包发给对方（5 点见 §0）
 
-最后更新：2026-06-13，1a 完成并实测。
+最后更新：2026-06-13，阶段一全部关闭（1a/1b 完成，1c 划掉）：3.2GB → 2.08GB。
 
 ## 0. 现状快照
 
@@ -33,9 +34,10 @@
   cd ~/ams_2 && ./build_ubuntu/UpperExampleCheck ~/ams_example \
     -fortran_upper_unscale_edge_len -ams_beta_mass_poisson \
     -ams_beta_mass_shift 1e-6 -B_ksp_type gmres -B_ksp_max_it 15 \
-    -em_outer_max_it 60 -em_outer_rtol 1e-7
+    -em_outer_max_it 60 -em_outer_rtol 1e-7 -A_ksp_gmres_restart 15
   ```
-  单核实测 ~8 分钟（2026-06-13 1a 后；更早记录为 35 分钟），峰值 RSS 2.38GB（1a 后实测）。
+  单核实测 ~8-9.5 分钟（2026-06-13；更早记录为 35 分钟），峰值 RSS 2.08GB
+  （1a+1b 后实测；restart 15 比默认 30 多 ~19% 迭代/墙钟，换 312MB 内存）。
 - **回归基线**（任何改动后必须全过）：
   1. `cd exmaple/eg_1 && ../../build_ubuntu/FemAms`，`result.txt` 的 sha256 必须是
      `342042dbcff12d00a13339367327a851158f0dc137f6af5caa1ee6779e9fd266`
@@ -91,13 +93,16 @@
   四项回归全过：eg_1 黄金哈希、AdapterSelfCheck、大算例 reference_relative_residual
   精确不变 + solve_relative_l2=0.690、代回残差法证 7.140e-8（高 σ 区 3.1678e-05，与修改前一致）。
 
-### 1b 外层 restart 降档（一行/纯选项，收益 ~325MB）
-- 先用选项实验：标准命令加 `-A_ksp_gmres_restart 15`。注意外层在 run9 配置下 ~37 步收敛，
-  restart 15 会引入一次重启，验证迭代数不显著增加（≤1.5×）后把默认写进 `create_pc()`
-  （`KSPGMRESSetRestart(ctx->A_ksp, 15)`，放 `KSPSetFromOptions` 之前以便选项可覆盖）。
-- 若迭代数恶化明显，试 20；权衡点写进提交信息。
+### 1b 外层 restart 降档（2026-06-13 完成，选项落地）
+- 实验结果（大算例，1a 基础上加 `-A_ksp_gmres_restart 15`）：外层 44 步收敛到 9.94e-8
+  （restart 30 时 ~37 步，+19%），峰值 RSS 2.38GB → **2.08GB**（省 312MB ≈ 预估），
+  墙钟 7:54 → 9:24，reference_relative_residual 精确不变，代回残差 6.814e-8、
+  高 σ 区 3.1601e-05 全部正常。
+- **决策：不改代码默认值，restart 15 以选项形式进标准命令与阶段三推荐 options 字符串**。
+  原因：eg_1 的外层要 25 步（>15），把 15 写成编译默认会改变 eg_1 的 FGMRES 收敛轨迹、
+  破坏黄金哈希基线；而大算例生产配置本来就走选项字符串，收益一分不少。
 
-### 1c C/M 改 SBAIJ 对称存储（最后做，收益 ~135MB 常驻，工作量中）
+### 1c C/M 改 SBAIJ 对称存储（2026-06-13 决定不做：阶段一目标已达成，收益不抵风险；保留原方案备查）
 - `MatCreateSBAIJ`（bs=1）只存上三角；`MatMult` 兼容（matshell 不用改）。
 - 两处下游需要全量：B=C+M 给 hypre（`MatConvert` SBAIJ→AIJ 后 AXPY，或直接从上三角数组
   另建 AIJ 的 B）；`MatPtAP(M,G)` 构造 Aβ（SBAIJ 不支持 PtAP，先 MatConvert 临时 AIJ，
