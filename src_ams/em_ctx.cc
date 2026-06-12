@@ -102,6 +102,10 @@ PetscErrorCode process_options(EMContext *ctx) {
 
   ctx->K_max_it = 100;
   ctx->dual_rtol = 1.0E-9;
+  PetscCall(PetscOptionsGetInt(NULL, NULL, "-em_outer_max_it",
+                               &ctx->K_max_it, NULL));
+  PetscCall(PetscOptionsGetReal(NULL, NULL, "-em_outer_rtol",
+                                &ctx->dual_rtol, NULL));
 
   ctx->max_dofs = 1000000;
 
