@@ -14,16 +14,26 @@
       135MB 收益不抵 SBAIJ 改动面与 PtAP/hypre 兼容风险；若未来内存再紧再启
 - [x] 2 dual-mode 验证关闭（2026-06-13：三个大算例日志各含 1 次该打印，重复求解确证
       不存在；误导文案已改为 "Solving linear system:"）
-- [ ] 3a C 接口层 ams_c_api
-- [ ] 3b Fortran 绑定模块
-- [ ] 3c Fortran 示例与数值对照
-- [ ] 3d CMake 静态库重构
+- [x] 3a C 接口层 ams_c_api（2026-06-13）
+- [x] 3b Fortran 绑定模块 ams_solver_mod.f90（2026-06-13）
+- [x] 3c Fortran 示例与数值对照（2026-06-13；**偏离原计划**：用内联 4 边小算例对照
+      numpy 精确解（相对差 1.79e-9，秒级可常驻回归），而非读大算例文本——绑定层只是
+      参数转发，大算例数值已由 UpperExampleCheck 验证；与对方真实 main.f90 的大算例
+      集成测试留到对接时用对方自己的读文件代码做）
+- [x] 3d CMake 静态库重构 AmsCore（2026-06-13）
 - [ ] 4-探针 PETSc Fortran stub 覆盖度检查（决定纯 Fortran 路线）
 - [ ] 4 纯 Fortran 移植（探针通过后细化）
 - [x] 运维：push 到 origin/dev（2026-06-13 完成；凭据已存 credential.helper store，后续可直接 push）
 - [ ] 运维：沟通包发给对方（5 点见 §0）
 
-最后更新：2026-06-13，阶段一关闭（3.2GB → 2.08GB）、阶段二关闭。
+最后更新：2026-06-13，阶段一（3.2GB → 2.08GB）、阶段二、阶段三全部关闭。
+下一步：阶段四探针（PETSc Fortran stub 覆盖度），以及等用户跟对方对接沟通包与混编集成。
+
+阶段三使用说明（对方接入）：链接 `build_ubuntu/libAmsCore.a` + `ams_solver_mod.f90`，
+Fortran 侧 `use ams_solver`，调用顺序 init→solve→finalize（见 fortran_example_check.f90 范例；
+init 的推荐 options 字符串见 ams_c_api.h 注释，含 -A_ksp_gmres_restart 15）。
+回归命令：`./build_ubuntu/FortranExampleCheck`（在 ~/ams_2 下运行，预期输出
+fortran_check_relative_l2 ~1.8e-9 + PASSED）。
 
 ## 0. 现状快照
 

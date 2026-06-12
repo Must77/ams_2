@@ -84,7 +84,8 @@ ADD_DEFINITIONS(-DTETLIBRARY)
 
 
 # 求解器核心静态库：各可执行文件共享同一份目标文件，
-ADD_LIBRARY(AmsCore STATIC PetscAMGInterface.cc em_ctx.cc em_utils.cc)
+# 也是对方 Fortran 程序链接的产物（连同 ams_solver_mod.f90 一起用）
+ADD_LIBRARY(AmsCore STATIC PetscAMGInterface.cc em_ctx.cc em_utils.cc ams_c_api.cc)
 TARGET_LINK_LIBRARIES(AmsCore ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
 
 ADD_EXECUTABLE(FemAms main.cpp)
@@ -102,3 +103,6 @@ TARGET_LINK_LIBRARIES(UpperDumpSystem AmsCore)
 ADD_EXECUTABLE(AmsLab ams_lab.cpp)
 TARGET_LINK_LIBRARIES(AmsLab ${MPI_C_LIBRARIES} ${PETSC_LIBRARY} ${METIS_LIBRARY} ${TETGEN_LIBRARY})
 
+# Fortran 绑定数值对照（主程序为 Fortran，需显式链 C++ 运行时）
+ADD_EXECUTABLE(FortranExampleCheck fortran_example_check.f90 ams_solver_mod.f90)
+TARGET_LINK_LIBRARIES(FortranExampleCheck AmsCore stdc++ m)
